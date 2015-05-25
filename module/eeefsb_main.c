@@ -35,6 +35,7 @@
 #include "ec.h"
 #include "pll.h"
 #include "eeefsb_wq.h"
+#include <linux/delay.h>
 
 /*
  * Module info
@@ -54,6 +55,9 @@ MODULE_INFO(module_depends, "i2c-i801");
  * fan_rpm     =                                                              *
  * fan_control =                                                              *
  */
+
+#ifdef OFF_OFF
+
 static struct proc_dir_entry *eeefsb_proc_rootdir;
 #define EEEFSB_PROC_READFUNC(NAME) \
     void eeefsb_proc_readfunc_##NAME (char *buf, int buflen, int *bufpos)
@@ -288,6 +292,17 @@ void eeefsb_proc_cleanup(void)
     remove_proc_entry("eeefsb", NULL);
 }
 
+#endif
+
+static int cpu_freq = 1600;
+static int step_time = 1000;
+
+module_param(cpu_freq, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(cpu_freq, "CPU frequency");
+
+module_param(step_time, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+MODULE_PARM_DESC(step_time, "CPU frequency divider step time");
+
 /*** Module initialization and cleanup ****************************************
 */
 static int __init eeefsb_init(void)
@@ -296,18 +311,47 @@ static int __init eeefsb_init(void)
     
     retVal = eeefsb_pll_init();
     if (retVal) return retVal;
-    eeefsb_proc_init();
+//    eeefsb_proc_init();
     eeefsb_wq_init();
     printk(KERN_NOTICE "eee PC CPU speed control tool, version %s\n",
            EEEFSB_VERSION);
-    
+
+    int cpuFreq = 0;
+    cpuFreq = eeefsb_get_cpu_freq();
+    printk("eeePC Start CPU frequecy %d\n", cpuFreq);
+
+int currM, currN, currPCI;
+
+eeefsb_get_freq(&currM, &currN, &currPCI);
+
+if (cpuFreq < cpu_freq) {
+	while (cpuFreq < cpu_freq) {
+	    eeefsb_get_freq(&currM, &currN, &currPCI);
+	    eeefsb_set_freq(currM, currN + 1, currPCI);
+	    cpuFreq = eeefsb_get_cpu_freq();
+	    printk("eeePC New CPU frequecy %d\n M=%d N=%d PCI=%d\n", cpuFreq, currM, currN, currPCI);
+	    mdelay(step_time);
+	}
+} else {
+	while (cpuFreq > cpu_freq) {
+	    eeefsb_get_freq(&currM, &currN, &currPCI);
+	    eeefsb_set_freq(currM, currN - 1, currPCI);
+	    cpuFreq = eeefsb_get_cpu_freq();
+	    printk("eeePC New CPU frequecy %d\n M=%d N=%d PCI=%d\n", cpuFreq, currM, currN, currPCI);
+	    mdelay(step_time);
+	}
+}
+
+cpuFreq = eeefsb_get_cpu_freq();
+printk("eeePC New CPU frequecy %d\n", cpuFreq);
+
     return 0;
 }
 
 static void __exit eeefsb_exit(void)
 {
     eeefsb_pll_cleanup();
-    eeefsb_proc_cleanup();
+//    eeefsb_proc_cleanup();
     eeefsb_wq_cleanup();
     printk(KERN_INFO "/proc/eeefsb removed\n");
 }
