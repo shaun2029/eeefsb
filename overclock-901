@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# Installation:
+#   Copy the source into the folder /usr/src/eeefsb
+#   Requires build-essentials 
+#   Copy this file (over-clock-901) into  the /usr/bin folder  (add executable permissions)
+#   Add it to the   /etc/local.rc file   (before the exit at the end of the file)
+#
+# dmesg will display the results of the over-clock
+
+# Intel GMA 950 Over-clock from 166 Mhz
+# render clock: 250 Mhz  display clock: 200 Mhz
+#
+# Use "intel_gma_top" to confirm overclock
+setpci -s 00:02.0 f0.b=33,05
+
+# Set the CPU clock & build kernel module if required
+modprobe i2c_i801
+
+if  ( ! modprobe eeefsb cpu_freq=1700 step_time=200 ); then
+	cd /usr/src/eeefsb/module
+    make clean
+    make
+    path=`uname -r`
+	cp eeefsb.ko "/lib/modules/$path/kernel/drivers/misc/"
+    depmod -a
+	modprobe eeefsb cpu_freq=1700 step_time=200
+fi
+
+# Unload the module - it is no longer needed
+rmmod -f eeefsb
+
